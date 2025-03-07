@@ -1,0 +1,11 @@
+# Ignore compiled binaries
+/noforward
+/forward
+
+# Ignore output files
+/outputfiles/*.txt
+
+# Ignore build artifacts
+*.o
+*.out
+*.exe
