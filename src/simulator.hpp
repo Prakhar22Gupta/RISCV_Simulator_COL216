@@ -9,8 +9,8 @@
 #include <iostream>
 #include <boost/tokenizer.hpp>
 #include "parser.hpp"
-#include "requirements.hpp"
-#include "pipeline.hpp"
+#include "decide_hazard.hpp"
+#include "logic.hpp"
 
 using namespace std;
 
@@ -37,15 +37,17 @@ struct Simulator
 		SYNTAX_ERROR,
 		MEMORY_ERROR
 	};
+
+
 	// constructor to initialise the instruction set
-	Simulator(std::ifstream &file,int question)
+	Simulator(std::ifstream &file)
 	{
 		instructions = {{"add", &Simulator::add}, {"and", &Simulator::And}, {"or", &Simulator::Or},
                 {"sub", &Simulator::sub}, {"mul", &Simulator::mul}, {"beq", &Simulator::beq},
                 {"bne", &Simulator::bne}, {"slt", &Simulator::slt}, {"jal", &Simulator::j},
                 {"lw", &Simulator::lw}, {"sw", &Simulator::sw}, {"addi", &Simulator::addi},
-                {"slli", &Simulator::sll}, {"srli", &Simulator::srl}, {"jalr", &Simulator::jalr}};
-		parser = new Parser(file,question);
+                {"slli", &Simulator::sll}, {"srli", &Simulator::srl}, {"jalr", &Simulator::jalr},{"j", &Simulator::j}};
+		parser = new Parser(file);
 	    commands=parser->commands;
 		registerMap = parser->registerMap;
 		address = parser->address;
@@ -53,6 +55,8 @@ struct Simulator
 		memoryupdatequeue=new UpdateQueue();
 		pipeline=parser->pipeline;
 	}
+
+	
 	// perform add operation
 	int add(std::string r1, std::string r2, std::string r3)
 	{

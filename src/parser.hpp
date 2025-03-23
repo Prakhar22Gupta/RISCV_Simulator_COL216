@@ -11,24 +11,26 @@
 #include <exception>
 #include <iostream>
 #include <boost/tokenizer.hpp>
-#include "requirements.hpp"
-#include "pipeline.hpp"
-#include "configuration.hpp"
+#include "decide_hazard.hpp"
+#include "logic.hpp"
+#include "register_file.hpp"
 
 using namespace std;
 
 struct Parser
 {
     vector< struct Command* > parametric_commands;
+
     vector<vector<int>> parametrs;
     std:: unordered_map<string,vector<int>> indices;
     std:: unordered_map<string,vector<string>> stage_names;
 	struct Pipeline *pipeline;
+
 	std::unordered_map<std::string, int> registerMap, address;
 	std::vector<std::vector<std::string>> commands;
 	std::vector<int> commandCount;
 
-	Parser(std::ifstream &file, int question)
+	Parser(std::ifstream &file)
 	{
 		for (int i = 0; i < 32; ++i)  registerMap["x" + std::to_string(i)] = i;
 			
@@ -49,7 +51,8 @@ struct Parser
 				registerMap["s" + std::to_string(i+2)] = 18 + i;
 			for (int i = 0; i < 4; ++i)
 				registerMap["t" + std::to_string(i+3)] = 28 + i;
-		struct Configuration* config = new Configuration(question);
+		
+		struct Configuration* config = new Configuration();
 		parametrs = config->parametrs;
 		indices = config->indices;
 		stage_names = config->stage_names;
@@ -59,65 +62,69 @@ struct Parser
 	}
 
     struct Command* define(std::vector<string> command){
-        bool in1=parametrs[0][0]==1;
-        int in2=parametrs[0][1];
-        vector<int> in4=indices[command[0]];
-        vector<int> in5;
+        bool param1=parametrs[0][0]==1;
+        int param2=parametrs[0][1];
+        vector<int> param4=indices[command[0]];
+        vector<int> param5;
         vector<string> command_type1={"add","sub","and","or","slt","mul"}, command_type2={"addi","andi","ori","sll","srl"};
-		vector<string> command_type3={"beq","bne"}, command_type4={"j","jal"};
-		int in9;
+		vector<string> command_type3={"beq","bne"}, command_type4={"j","jal","jalr"};
+		int param9;
 		std::vector<std::string> subsetVec;
 		std::copy_if(command.begin(), command.end(), std::back_inserter(subsetVec),
     	[](const std::string& s) { return s.find("x") != std::string::npos; });
 
+		//for R type commands 3 registers stored
 		if(std::find(command_type1.begin(),command_type1.end(),command[0])!=command_type1.end()){
-			in5={registerMap[subsetVec[0]],registerMap[subsetVec[1]],registerMap[subsetVec[2]]};
-			in9=-1;
+			param5={registerMap[subsetVec[0]],registerMap[subsetVec[1]],registerMap[subsetVec[2]]};
+			param9=-1;
 		}
+		//for I type commands 2 registers and a constant
 		else if(std::find(command_type2.begin(),command_type2.end(),command[0])!=command_type2.end()){
-			in5={registerMap[subsetVec[0]],registerMap[subsetVec[1]],-1};
-			in9=stoi(command[3]);
+			param5={registerMap[subsetVec[0]],registerMap[subsetVec[1]],-1};
+			param9=stoi(command[3]);
 		}
 		else if(command[0]=="lw"){
-			in5={registerMap[subsetVec[0]],registerMap[subsetVec[1]],-1};
+			param5={registerMap[subsetVec[0]],registerMap[subsetVec[1]],-1};
 			if(std::find(command[2].begin(),command[2].end(),'x')==command[2].end()){
-				in9=stoi(command[2]);
+				param9=stoi(command[2]);
 			}
 			else{
-				in9=0;
+				param9=0;
 			}
 		}
 		else if(command[0]=="sw"){
-			in5={-1,registerMap[subsetVec[0]],registerMap[subsetVec[1]]};
+			param5={-1,registerMap[subsetVec[0]],registerMap[subsetVec[1]]};
 			if(std::find(command[2].begin(),command[2].end(),'x')==command[2].end()){
-				in9=stoi(command[2]);
+				param9=stoi(command[2]);
 			}
 			else{
-				in9=0;
+				param9=0;
 			}
 		}
 		else if(std::find(command_type3.begin(),command_type3.end(),command[0])!=command_type3.end()){
-			in5={-1,registerMap[subsetVec[0]],registerMap[subsetVec[1]]};
-			in9=-1;
+			param5={-1,registerMap[subsetVec[0]],registerMap[subsetVec[1]]};
+			param9=-1;
 		}
 		else if(std::find(command_type4.begin(),command_type4.end(),command[0])!=command_type4.end()){
-			in5 = { registerMap[subsetVec[0]], -1, -1 };
-			in9 = stoi(command[2]);
+			param5 = { registerMap[subsetVec[0]], -1, -1 };
+			param9 = stoi(command[2]);
 		}
 		else{
 			std:: cerr <<"error in command type"<<std::endl;
 		}
-        vector<string> in6=stage_names[command[0]];
-		vector<int> in3;
+
+		
+        vector<string> param6=stage_names[command[0]];
+		vector<int> param3;
 		unordered_map<string, int> stagemap;
-		for (int i = 0; i < (int)in6.size(); i++) {
-            stagemap[in6[i]] = i;
+		for (int i = 0; i < (int)param6.size(); i++) {
+            stagemap[param6[i]] = i;
         }
-		for(int i=0;i<in6.size();i++){
-			in3.push_back(parametrs[1][stagemap[in6[i]]]);
+		for(int i=0;i<param6.size();i++){
+			param3.push_back(parametrs[1][stagemap[param6[i]]]);
 		}
-        string in7=command[0];
-        struct Command* cmd = new Command(in1,in2,in3,in4,in5,in6,in7,0,in9);
+        string param7=command[0];
+        struct Command* cmd = new Command(param1,param2,param3,param4,param5,param6,param7,0,param9);
         return cmd;
     }
 
@@ -133,64 +140,6 @@ struct Parser
 		// empty line or a comment only line
 		if (command.empty()){
 			return;
-		}
-		else if (command.size() == 1)
-		{
-			std::string label = command[0].back() == ':' ? command[0].substr(0, command[0].size() - 1) : "?";
-			if (address.find(label) == address.end()){
-				address[label] = commands.size();
-			}
-			else{
-				address[label] = -1;
-			}
-			command.clear();
-		}
-		else if (command[0].back() == ':')
-		{
-			std::string label = command[0].substr(0, command[0].size() - 1);
-			if (address.find(label) == address.end()){
-				address[label] = commands.size();
-			}
-			else{
-				address[label] = -1;
-			}
-			command = std::vector<std::string>(command.begin() + 1, command.end());
-		}
-		else if (command[0].find(':') != std::string::npos)
-		{
-			int idx = command[0].find(':');
-			std::string label = command[0].substr(0, idx);
-			if (address.find(label) == address.end()){
-				address[label] = commands.size();
-			}
-			else{
-				address[label] = -1;
-			}
-			command[0] = command[0].substr(idx + 1);
-		}
-		else if (command[1][0] == ':')
-		{
-			if (address.find(command[0]) == address.end()){
-				address[command[0]] = commands.size();
-			}
-			else{
-				address[command[0]] = -1;
-			}
-			command[1] = command[1].substr(1);
-			if (command[1] == ""){
-				command.erase(command.begin(), command.begin() + 2);
-			}
-			else{
-				command.erase(command.begin(), command.begin() + 1);
-			}
-		}
-		if (command.empty()){
-			return;
-		}
-		if (command.size() > 4){
-			for (int i = 4; i < (int)command.size(); ++i){
-				command[3] += " " + command[i];
-			}
 		}
 		command.resize(4);
 		commands.push_back(command);
@@ -213,4 +162,5 @@ struct Parser
 		file.close();
 	}
 };
+
 #endif

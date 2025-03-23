@@ -28,22 +28,22 @@ struct Command{
     int value;
     int constant;
 
-    Command(bool in1, int in2, vector<int> in3, vector<int> in4, vector<int> in5, vector<string> in6, string in7, int in8, int in9) {
-        intermediatelatchesactive = in1;
-        intermediatelatchlength = in2;
-        numberofstages = (int)in3.size();
-        stagelengths = in3;
-        bypassindex1 = in4[0];
-        bypassindex2 = in4[1];
-        readindex = in4[2];
-        writeindex = in4[3];
-        destinationregister = in5[0];
-        sourceregister1 = in5[1];
-        sourceregister2 = in5[2];
-        stagenames = in6;
-        opcode = in7;
-        value = in8;
-        constant = in9;
+    Command(bool param1, int param2, vector<int> param3, vector<int> param4, vector<int> param5, vector<string> param6, string param7, int param8, int param9) {
+        intermediatelatchesactive = param1;
+        intermediatelatchlength = param2;
+        numberofstages = (int)param3.size();
+        stagelengths = param3;
+        bypassindex1 = param4[0];
+        bypassindex2 = param4[1];
+        readindex = param4[2];
+        writeindex = param4[3];
+        destinationregister = param5[0];
+        sourceregister1 = param5[1];
+        sourceregister2 = param5[2];
+        stagenames = param6;
+        opcode = param7;
+        value = param8;
+        constant = param9;
     }
 
     void print_command() {
@@ -95,11 +95,11 @@ struct UpdateQueue {
         size = 0;
     }
 
-    void enqueue(int in1,int in2,int in3) {
+    void enqueue(int param1,int param2,int param3) {
         QueueNode* newnode = new QueueNode;
-        newnode->register_id = in1;
-        newnode->value = in2;
-        newnode->updatetime = in3;
+        newnode->register_id = param1;
+        newnode->value = param2;
+        newnode->updatetime = param3;
         newnode->next = nullptr;
         newnode->prev = nullptr;
         if (head == nullptr) {
@@ -178,9 +178,9 @@ struct Registerfile{
     vector<int> values;
     struct UpdateQueue* queue;
 
-    Registerfile(int in1){
-        size = in1;
-        vector<int> temp1(in1, 0),temp2(in1,0),temp3(in1,0);
+    Registerfile(int param1){
+        size = param1;
+        vector<int> temp1(param1, 0),temp2(param1,0),temp3(param1,0);
         updatetime.resize(size);
         updatetime = temp1;
         intermediateupdatetime.resize(size);
@@ -190,15 +190,14 @@ struct Registerfile{
         queue = new UpdateQueue();
     }
 
-    vector<int> copy_vector(const vector<int>& in1) {
-        vector<int> newvector(in1.size());
-        for (size_t i = 0; i < in1.size(); i++) {
-            newvector[i] = in1[i];
+    vector<int> copy_vector(const vector<int>& param1) {
+        vector<int> newvector(param1.size());
+        for (size_t i = 0; i < param1.size(); i++) {
+            newvector[i] = param1[i];
         }
         return newvector;
     }
     
-
     struct Registerfile* copy_file() {
         struct Registerfile* newregisterfile = new Registerfile(size);
         newregisterfile->size = size;
@@ -209,21 +208,21 @@ struct Registerfile{
         return newregisterfile;
     }
 
-    void make_update(int in1,int in2, int in3){
-        updatetime[in1] = in3;
-        values[in1] = in2;
+    void make_update(int param1,int param2, int param3){
+        updatetime[param1] = param3;
+        values[param1] = param2;
     }
 
-    vector<int> state_at_time(int in1, vector<int> file, int in2){
+    vector<int> state_at_time(int param1, vector<int> file, int param2){
         vector<int> newregisterfile = copy_vector(file);
         queue->pointer = queue->head;
         vector<int> temp = queue->peek();
         while(temp[0]!=-1){
-            if(temp[2]<=in2){
+            if(temp[2]<=param2){
                 queue->move_right();
                 temp = queue->peek();
             }
-            else if(temp[2]<=in1){
+            else if(temp[2]<=param1){
                 newregisterfile[temp[1]] = temp[0];
                 queue->move_right();
                 temp = queue->peek();
@@ -243,15 +242,15 @@ struct Runtimedata{
     vector<string> stagenames;
     vector<vector<int> > stages;
 
-    Runtimedata(Command* in1, int in2, int in3) {
-        command = in1;
-        starttime = in2;
-        stagenames.resize(in3);
-        vector<string> temp3(in3,"");
+    Runtimedata(Command* param1, int param2, int param3) {
+        command = param1;
+        starttime = param2;
+        stagenames.resize(param3);
+        vector<string> temp3(param3,"");
         stagenames = temp3;
-        stages.resize(in3);
-        vector<vector<int> > temp1(in3);
-        for (int i = 0; i < in3; i++) {
+        stages.resize(param3);
+        vector<vector<int> > temp1(param3);
+        for (int i = 0; i < param3; i++) {
             vector<int> temp2(2,0);
             temp1[i] = temp2;
         }

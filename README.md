@@ -1,1 +1,1 @@
-# RISCV_Simulator_COL216
+# RISC-V SIMULATOR

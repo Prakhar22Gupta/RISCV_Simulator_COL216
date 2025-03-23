@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <iostream>
-#include "requirements.hpp"
+#include "register_file.hpp"
 using namespace std;
 struct Pipeline{
 
@@ -27,43 +27,44 @@ struct Pipeline{
     int timetaken;
     unordered_map<string, int> stagemap;
     int cycle;
-
-    Pipeline(int in1, bool in2, bool in3, int in4, int in5, vector<string> in6,bool in7) {
-        numberofstages = in1;
-        firstinfirstoutactive= in7;
-        bypassactive = in2;
-        symmetryactive = in3;
-        numberofregisters = in4;
-        registerfile = new Registerfile(in4);
-        pseudoregisterfile = new Registerfile(in4);
-        stageemptytime.resize(in1);
-        vector<int> temp1(in1,0);
+ 
+    Pipeline(int param1, bool param2, bool param3, int param4, int param5, vector<string> param6,bool param7) {
+        numberofstages = param1;
+        firstinfirstoutactive= param7;
+        bypassactive = param2;
+        symmetryactive = param3;
+        numberofregisters = param4;
+        registerfile = new Registerfile(param4);
+        pseudoregisterfile = new Registerfile(param4);
+        stageemptytime.resize(param1);
+        vector<int> temp1(param1,0);
         stageemptytime = temp1;
-        pseudostageemptytime.resize(in1);
-        vector<int> temp2(in1,0);
+        pseudostageemptytime.resize(param1);
+        vector<int> temp2(param1,0);
         pseudostageemptytime = temp2;
-        stagestarttime.resize(in1);
-        vector<int> temp3(in1,0);
+        stagestarttime.resize(param1);
+        vector<int> temp3(param1,0);
         stagestarttime = temp3;
-        pseudostagestarttime.resize(in1);
-        vector<int> temp4(in1,0);
+        pseudostagestarttime.resize(param1);
+        vector<int> temp4(param1,0);
         pseudostagestarttime = temp4;
-        starttime = in5;
+        starttime = param5;
         timetaken = 0;
-        for (int i = 0; i < (int)in6.size(); i++) {
-            stagemap[in6[i]] = i;
+        for (int i = 0; i < (int)param6.size(); i++) {
+            stagemap[param6[i]] = i;
         }
         history.resize(0);
         pseudoruntimelist.resize(0);
         cycle=-1;
     }
 
-    struct Runtimedata* run_command(Command* in1){
+    struct Runtimedata* run_command(Command* param1){
 
-    vector<int> v = {in1->destinationregister,in1->sourceregister1,in1->sourceregister2};
-    vector<int> v1 = {in1->bypassindex1,in1->bypassindex2,in1->readindex,in1->writeindex};
-    struct Command* command = new Command(false,in1->intermediatelatchlength,in1->stagelengths,v1,v,in1->stagenames,in1->opcode,in1->value,in1->constant);
-    if (in1->intermediatelatchesactive){
+    vector<int> v = {param1->destinationregister,param1->sourceregister1,param1->sourceregister2};
+    vector<int> v1 = {param1->bypassindex1,param1->bypassindex2,param1->readindex,param1->writeindex};
+    struct Command* command = new Command(false,param1->intermediatelatchlength,param1->stagelengths,v1,v,param1->stagenames,param1->opcode,param1->value,param1->constant);
+    
+    if (param1->intermediatelatchesactive){
         for(int i=0;i<(int)command->stagelengths.size()-1;i++){
             command->stagelengths[i]+=command->intermediatelatchlength;
         }
@@ -93,13 +94,26 @@ struct Pipeline{
 
     for (int j = 0; j < command->numberofstages - 1; j++) {
         int endtime = runtime->stages[j][0] + command->stagelengths[j];
+
+        //Hazard check at ID stage
         if ((j + 1) == command->readindex) {
-            if (command->sourceregister1 != -1) {
-                endtime = max(endtime, pseudoregisterfile->updatetime[command->sourceregister1]);
+            if(!bypassactive){
+                if (command->sourceregister1 != -1) {
+                    endtime = max(endtime, pseudoregisterfile->updatetime[command->sourceregister1]);
+                }
+                if (command->sourceregister2 != -1) {
+                    endtime = max(endtime, pseudoregisterfile->updatetime[command->sourceregister2]);
+                }
             }
-            if (command->sourceregister2 != -1) {
-                endtime = max(endtime, pseudoregisterfile->updatetime[command->sourceregister2]);
+            else{
+                if (command->sourceregister1 != -1) {
+                    endtime = max(endtime, pseudoregisterfile->intermediateupdatetime[command->sourceregister1]);
+                }
+                if (command->sourceregister2 != -1) {
+                    endtime = max(endtime, pseudoregisterfile->intermediateupdatetime[command->sourceregister2]);
+                }
             }
+
         }
         // (You may keep any additional stage-boundary constraints below.)
         if (endtime < pseudostageemptytime[stagemap[command->stagenames[j + 1]]]
@@ -109,6 +123,8 @@ struct Pipeline{
 
         // Update register file times when applicable
         if (command->destinationregister != -1) {
+
+            //This is for EX stage in the case of forwarding
             if (j == command->readindex) {
                 // Update intermediate updatetime at read stage.
                 pseudoregisterfile->intermediateupdatetime[command->destinationregister] = endtime;
@@ -146,7 +162,7 @@ struct Pipeline{
         registerfile->values[command->destinationregister] = command->value;
     }
     runtime->stages[command->numberofstages - 1][1] =
-        pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]];
+    pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]];
     registerfile->values[command->destinationregister] = command->value;
     pseudoruntimelist.push_back(runtime);
     return runtime;
