@@ -45,8 +45,9 @@ struct Simulator
 		instructions = {{"add", &Simulator::add}, {"and", &Simulator::And}, {"or", &Simulator::Or},
                 {"sub", &Simulator::sub}, {"mul", &Simulator::mul}, {"beq", &Simulator::beq},
                 {"bne", &Simulator::bne}, {"slt", &Simulator::slt}, {"jal", &Simulator::j},
-                {"lw", &Simulator::lw}, {"sw", &Simulator::sw}, {"addi", &Simulator::addi},
-                {"slli", &Simulator::sll}, {"srli", &Simulator::srl}, {"jalr", &Simulator::jalr},{"j", &Simulator::j}};
+                {"lw", &Simulator::lw}, {"sw", &Simulator::sw},{"addi", &Simulator::addi},
+                {"slli", &Simulator::sll}, {"srli", &Simulator::srl}, {"jalr", &Simulator::jalr},{"j", &Simulator::j}, {"lb",  &Simulator::lb},
+				{"sb",  &Simulator::sb}};
 		parser = new Parser(file);
 	    commands=parser->commands;
 		registerMap = parser->registerMap;
@@ -130,30 +131,6 @@ struct Simulator
 		}
 	}
 
-	int jalr(std::string rd, std::string rs1, std::string offset_str)
-{
-    // Check that both registers are valid.
-    if (!checkRegisters({rd, rs1}))
-        return 1;
-    try {
-        int offset = stoi(offset_str);
-        // Compute the target address from register value plus offset.
-        int target = registers[registerMap[rs1]] + offset;
-        // Ensure the target is aligned (RISC-V requires the least-significant bit to be zero).
-        target = target & ~1;
-        // Since our PC is used as a word index (not byte address), divide by 4.
-        PCnext = target / 4;
-        // Write the return address (PCcurr+1) to rd, unless rd is x0.
-        if(registerMap[rd] != 0)
-            registers[registerMap[rd]] = PCcurr + 1;
-        return 0;
-    }
-    catch (std::exception &e) {
-        return 4;
-    }
-}
-
-
 	// implements slt operation
 	int slt(std::string r1, std::string r2, std::string r3)
 	{
@@ -164,21 +141,53 @@ struct Simulator
 		PCnext = PCcurr + 1;
 		return 0;
 	}
-	// perform the jump operation
-	// In simulator.hpp, update the jump handler to support jal with an immediate offset:
-int j(std::string rd, std::string offset_str, std::string unused2)
-{
-    try {
-        // Convert the offset string to an integer.
-        int offset = stoi(offset_str);
-        // Update the PC relative to the current PC.
-        PCnext = PCcurr + offset;
-        return 0;
-    }
-    catch (std::exception &e) {
-        return 4;  // Immediate conversion failed.
-    }
-}
+
+	// Implements both j (jump) and jal (jump and link)
+	int j(std::string rd, std::string offset_str, std::string unused2)
+	{
+		try {
+			// Convert the offset from string to integer.
+			int offset = stoi(offset_str);
+			
+			// Validate that the destination register is defined.
+			if (registerMap.find(rd) == registerMap.end())
+				return 1; // error: invalid register
+
+			// For jal (jump and link), if rd is not x0, set rd to return address (PCcurr + 1).
+			if (registerMap[rd] != 0) {
+				registers[registerMap[rd]] = PCcurr + 1;
+			}
+			
+			// Update the next program counter.
+			PCnext = PCcurr + offset;
+			return 0;
+		}
+		catch (std::exception &e) {	
+			return 4;  // error in immediate conversion
+		}
+	}
+
+	int jalr(std::string rd, std::string rs1, std::string offset_str)
+	{
+		// Check that both registers are valid.
+		if (!checkRegisters({rd, rs1}))
+			return 1;
+		try {
+			int offset = stoi(offset_str);
+			// Calculate the target address as the sum of the content of rs1 and the immediate offset.
+			int target = registers[registerMap[rs1]] + offset;
+			
+			// Update the link if needed: if rd is not x0, store PCcurr+1 in rd.
+			if (registerMap[rd] != 0)
+				registers[registerMap[rd]] = PCcurr + 1;
+			
+			PCnext = target;
+			return 0;
+		}
+		catch (std::exception &e) {
+			return 4;
+		}
+	}
 
 	// perform load word operation
 	int lw(std::string r, std::string in1, std::string in2)
@@ -225,6 +234,91 @@ int j(std::string rd, std::string offset_str, std::string unused2)
 		PCnext = PCcurr + 1;
 		return 0;
 	}
+
+	// Load Byte: Loads a single byte (with sign-extension) into register r.
+int lb(std::string r, std::string in1, std::string in2)
+{
+    std::string location;
+    if(std::find(in1.begin(), in1.end(), '$') != in1.end()){
+        location = in1;
+    }
+    else{
+        location = in1 + "(" + in2 + ")";
+    }
+    if (!checkRegister(r) || registerMap[r] == 0)
+        return 1;
+    int addr = 0;
+    try {
+        size_t lparen = location.find('(');
+        if(lparen != std::string::npos){
+            int offset = (lparen > 0) ? stoi(location.substr(0, lparen)) : 0;
+            std::string reg = location.substr(lparen+1);
+            reg.pop_back(); // remove trailing ')'
+            if(!checkRegister(reg))
+                return 1;
+            addr = registers[registerMap[reg]] + offset;
+        } else {
+            addr = stoi(location);
+        }
+    } catch(std::exception &e) {
+        return 4;
+    }
+    // For lb, no alignment check is needed.
+    int word_index = addr / 4;
+    int byte_offset = addr % 4;
+    if(word_index < 0 || word_index >= (MAX >> 2)) return -3;
+    int word = data[word_index];
+    int byte_val = (word >> (8 * byte_offset)) & 0xff;
+    // Sign-extend if the most significant bit is set.
+    if (byte_val & 0x80) byte_val |= ~0xff;
+    registers[registerMap[r]] = byte_val;
+    PCnext = PCcurr + 1;
+    return 0;
+}
+
+// Store Byte: Stores the least-significant byte from register r into memory.
+int sb(std::string r, std::string in1, std::string in2)
+{
+    std::string location;
+    if(std::find(in1.begin(), in1.end(), '$') != in1.end()){
+        location = in1;
+    }
+    else{
+        location = in1 + "(" + in2 + ")";
+    }
+    if (!checkRegister(r))
+        return 1;
+    int addr = 0;
+    try {
+        size_t lparen = location.find('(');
+        if(lparen != std::string::npos){
+            int offset = (lparen > 0) ? stoi(location.substr(0, lparen)) : 0;
+            std::string reg = location.substr(lparen+1);
+            reg.pop_back();
+            if(!checkRegister(reg))
+                return 1;
+            addr = registers[registerMap[reg]] + offset;
+        } else {
+            addr = stoi(location);
+        }
+    } catch(std::exception &e) {
+        return 4;
+    }
+    int word_index = addr / 4;
+    int byte_offset = addr % 4;
+    if(word_index < 0 || word_index >= (MAX >> 2)) return -3;
+    int old_word = data[word_index];
+    int mask = ~(0xff << (8 * byte_offset));
+    int cleared_word = old_word & mask;
+    int byte_val = registers[registerMap[r]] & 0xff;
+    int new_word = cleared_word | (byte_val << (8 * byte_offset));
+    data[word_index] = new_word;
+    // Optionally update memoryDelta if you want to track memory changes:
+    memoryDelta[word_index] = new_word;
+    PCnext = PCcurr + 1;
+    return 0;
+}
+
 
 	
 	int locateAddress(std::string location)
@@ -406,10 +500,10 @@ int j(std::string rd, std::string offset_str, std::string unused2)
 			parser->parametric_commands[PCcurr]->value=registers[registerMap[command[1]]];
 			pipeline->run_command(parser->parametric_commands[PCcurr]);
 			pipeline->save();
-			if(command[0]=="beq" || command[0]=="bne" || command[0]=="j"){
+			if(command[0]=="beq" || command[0]=="bne" || command[0]=="j" || command[0]=="jal" || command[0]=="jalr"){
 				pipeline->insert_halt(parser->parametric_commands[PCcurr]);
 			}
-			if(command[0]=="sw"){
+			if(command[0]=="sw" || command[0]=="sb"){
 				updatememory(command,pipeline->history[(int)pipeline->history.size()-1]->stages[parser->parametric_commands[PCcurr]->readindex][1]);
 			}
 			PCcurr = PCnext;
