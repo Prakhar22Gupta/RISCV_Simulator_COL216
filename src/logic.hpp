@@ -1,5 +1,5 @@
-#ifndef __PIPELINE_H__
-#define __PIPELINE_H__
+#ifndef __LOGIC_H__
+#define __LOGIC_H__
 #include <stdlib.h>
 #include <vector>
 #include <string>
@@ -10,51 +10,45 @@
 using namespace std;
 struct Pipeline{
 
-    int numberofstages;
-    bool firstinfirstoutactive;
+    bool fifo;
     bool bypassactive;
-    bool symmetryactive;
     vector<int> stageemptytime;
-    vector<int> pseudostageemptytime;
+    vector<int> smart_stageemptytime;
     vector<int> stagestarttime;
-    vector<int> pseudostagestarttime;
-    int numberofregisters;
+    vector<int> smart_stagestarttime;
     struct Registerfile* registerfile;
-    struct Registerfile* pseudoregisterfile;
-    vector<Runtimedata*> pseudoruntimelist;
+    struct Registerfile* one_instruction_registerfile;
+    vector<Runtimedata*> smart_runtime_list;
     vector<Runtimedata*> history;
     int starttime;
     int timetaken;
     unordered_map<string, int> stagemap;
     int cycle;
  
-    Pipeline(int param1, bool param2, bool param3, int param4, int param5, vector<string> param6,bool param7) {
-        numberofstages = param1;
-        firstinfirstoutactive= param7;
+    Pipeline(bool param2, bool param3, int param4, int param5, vector<string> param6,bool param7) {
+        fifo= param7;
         bypassactive = param2;
-        symmetryactive = param3;
-        numberofregisters = param4;
-        registerfile = new Registerfile(param4);
-        pseudoregisterfile = new Registerfile(param4);
-        stageemptytime.resize(param1);
-        vector<int> temp1(param1,0);
+        registerfile = new Registerfile(32);
+        one_instruction_registerfile = new Registerfile(32);
+        stageemptytime.resize(5);
+        vector<int> temp1(5,0);
         stageemptytime = temp1;
-        pseudostageemptytime.resize(param1);
-        vector<int> temp2(param1,0);
-        pseudostageemptytime = temp2;
-        stagestarttime.resize(param1);
-        vector<int> temp3(param1,0);
+        smart_stageemptytime.resize(5);
+        vector<int> temp2(5,0);
+        smart_stageemptytime = temp2;
+        stagestarttime.resize(5);
+        vector<int> temp3(5,0);
         stagestarttime = temp3;
-        pseudostagestarttime.resize(param1);
-        vector<int> temp4(param1,0);
-        pseudostagestarttime = temp4;
-        starttime = param5;
+        smart_stagestarttime.resize(5);
+        vector<int> temp4(5,0);
+        smart_stagestarttime = temp4;
+        starttime = 0;
         timetaken = 0;
         for (int i = 0; i < (int)param6.size(); i++) {
             stagemap[param6[i]] = i;
         }
         history.resize(0);
-        pseudoruntimelist.resize(0);
+        smart_runtime_list.resize(0);
         cycle=-1;
     }
 
@@ -62,63 +56,60 @@ struct Pipeline{
 
     vector<int> v = {param1->destinationregister,param1->sourceregister1,param1->sourceregister2};
     vector<int> v1 = {param1->bypassindex1,param1->bypassindex2,param1->readindex,param1->writeindex};
-    struct Command* command = new Command(false,param1->intermediatelatchlength,param1->stagelengths,v1,v,param1->stagenames,param1->opcode,param1->value,param1->constant);
+    struct Command* command = new Command(param1->stagelengths,v1,v,param1->stagenames,param1->opcode,param1->value,param1->constant);
     
-    if (param1->intermediatelatchesactive){
-        for(int i=0;i<(int)command->stagelengths.size()-1;i++){
-            command->stagelengths[i]+=command->intermediatelatchlength;
+    for(int i=0;i<(int)command->stagelengths.size()-1;i++){
+            command->stagelengths[i]+=20;
+        }
+    
+    vector<int> temp1(5,*max_element(command->stagelengths.begin(),command->stagelengths.end()));
+    command->stagelengths= temp1;
+    if(cycle==-1){
+        cycle=temp1[0];
+    }
+    else{
+        if(cycle!=temp1[0]){
+            cycle=-2;
         }
     }
 
-    if (symmetryactive){
-        vector<int> temp1(command->numberofstages,*max_element(command->stagelengths.begin(),command->stagelengths.end()));
-        command->stagelengths= temp1;
-        if(cycle==-1){
-            cycle=temp1[0];
-        }
-        else{
-            if(cycle!=temp1[0]){
-                cycle=-2;
-            }
-        }
-    }
 
-    bool firstinfirstouttemp=firstinfirstoutactive;
+    bool firstinfirstouttemp=fifo;
     if(command->destinationregister!=-1){
         firstinfirstouttemp=false;
     }
-    struct Runtimedata* runtime = new Runtimedata(command,stageemptytime[0],command->numberofstages);
+    struct Runtimedata* runtime = new Runtimedata(command,stageemptytime[0],5);
     runtime->stagenames[0]=command->stagenames[0];
-    runtime->stages[0]={pseudostageemptytime[stagemap[command->stagenames[0]]],-1};
-    pseudostagestarttime[stagemap[command->stagenames[0]]]=pseudostageemptytime[stagemap[command->stagenames[0]]];
+    runtime->stages[0]={smart_stageemptytime[stagemap[command->stagenames[0]]],-1};
+    smart_stagestarttime[stagemap[command->stagenames[0]]]=smart_stageemptytime[stagemap[command->stagenames[0]]];
 
-    for (int j = 0; j < command->numberofstages - 1; j++) {
+    for (int j = 0; j < 4; j++) {
         int endtime = runtime->stages[j][0] + command->stagelengths[j];
 
         //Hazard check at ID stage
         if ((j + 1) == command->readindex) {
             if(!bypassactive){
                 if (command->sourceregister1 != -1) {
-                    endtime = max(endtime, pseudoregisterfile->updatetime[command->sourceregister1]);
+                    endtime = max(endtime, one_instruction_registerfile->updatetime[command->sourceregister1]);
                 }
                 if (command->sourceregister2 != -1) {
-                    endtime = max(endtime, pseudoregisterfile->updatetime[command->sourceregister2]);
+                    endtime = max(endtime, one_instruction_registerfile->updatetime[command->sourceregister2]);
                 }
             }
             else{
                 if (command->sourceregister1 != -1) {
-                    endtime = max(endtime, pseudoregisterfile->intermediateupdatetime[command->sourceregister1]);
+                    endtime = max(endtime, one_instruction_registerfile->intermediateupdatetime[command->sourceregister1]);
                 }
                 if (command->sourceregister2 != -1) {
-                    endtime = max(endtime, pseudoregisterfile->intermediateupdatetime[command->sourceregister2]);
+                    endtime = max(endtime, one_instruction_registerfile->intermediateupdatetime[command->sourceregister2]);
                 }
             }
-
         }
-        // (You may keep any additional stage-boundary constraints below.)
-        if (endtime < pseudostageemptytime[stagemap[command->stagenames[j + 1]]]
-            && (endtime > pseudostagestarttime[stagemap[command->stagenames[j + 1]]] || firstinfirstouttemp)) {
-            endtime = pseudostageemptytime[stagemap[command->stagenames[j + 1]]];
+
+        // (Keeping additional stage-boundary constraints below.)
+        if (endtime < smart_stageemptytime[stagemap[command->stagenames[j + 1]]]
+            && (endtime > smart_stagestarttime[stagemap[command->stagenames[j + 1]]] || firstinfirstouttemp)) {
+            endtime = smart_stageemptytime[stagemap[command->stagenames[j + 1]]];
         }
 
         // Update register file times when applicable
@@ -127,78 +118,72 @@ struct Pipeline{
             //This is for EX stage in the case of forwarding
             if (j == command->readindex) {
                 // Update intermediate updatetime at read stage.
-                pseudoregisterfile->intermediateupdatetime[command->destinationregister] = endtime;
+                one_instruction_registerfile->intermediateupdatetime[command->destinationregister] = endtime;
             }
             if (j == command->writeindex) {
                 // At the write-back stage, update the register's updatetime.
-                pseudoregisterfile->updatetime[command->destinationregister] = endtime;
-                pseudoregisterfile->queue->enqueue(command->destinationregister, command->value, endtime);
+                one_instruction_registerfile->updatetime[command->destinationregister] = endtime;
+                one_instruction_registerfile->queue->enqueue(command->destinationregister, command->value, endtime);
             }
         }
         runtime->stages[j][1] = endtime;
         runtime->stagenames[j + 1] = command->stagenames[j + 1];
         runtime->stages[j + 1] = { endtime, -1 };
-        pseudostageemptytime[stagemap[command->stagenames[j]]] = endtime;
-        pseudostagestarttime[stagemap[command->stagenames[j + 1]]] = endtime;
+        smart_stageemptytime[stagemap[command->stagenames[j]]] = endtime;
+        smart_stagestarttime[stagemap[command->stagenames[j + 1]]] = endtime;
     }
 
-
-    pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]] =
-        runtime->stages[command->numberofstages - 1][0] + command->stagelengths[command->numberofstages - 1];
-    if (pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]] > timetaken) {
-        timetaken = pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]];
+    //for last stage
+    smart_stageemptytime[stagemap[command->stagenames[4]]] =
+        runtime->stages[4][0] + command->stagelengths[4];
+    if (smart_stageemptytime[stagemap[command->stagenames[4]]] > timetaken) {
+        timetaken = smart_stageemptytime[stagemap[command->stagenames[4]]];
     }
     if (command->destinationregister != -1) {
-        if (command->writeindex == command->numberofstages - 1) {
-            pseudoregisterfile->updatetime[command->destinationregister] =
-                pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]];
-            pseudoregisterfile->queue->enqueue(command->destinationregister, command->value,
-                pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]]);
+        if (command->writeindex == 4) {
+            one_instruction_registerfile->updatetime[command->destinationregister] =
+                smart_stageemptytime[stagemap[command->stagenames[4]]];
+            one_instruction_registerfile->queue->enqueue(command->destinationregister, command->value,
+                smart_stageemptytime[stagemap[command->stagenames[4]]]);
         }
-        if (command->readindex == command->numberofstages - 1) {
-            pseudoregisterfile->intermediateupdatetime[command->destinationregister] =
-                pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]];
+        if (command->readindex == 4) {
+            one_instruction_registerfile->intermediateupdatetime[command->destinationregister] =
+                smart_stageemptytime[stagemap[command->stagenames[4]]];
         }
         registerfile->values[command->destinationregister] = command->value;
     }
-    runtime->stages[command->numberofstages - 1][1] =
-    pseudostageemptytime[stagemap[command->stagenames[command->numberofstages - 1]]];
+    runtime->stages[4][1] =
+    smart_stageemptytime[stagemap[command->stagenames[4]]];
     registerfile->values[command->destinationregister] = command->value;
-    pseudoruntimelist.push_back(runtime);
+    smart_runtime_list.push_back(runtime);
     return runtime;
 }
 
     void save() {
-    history.insert(history.end(), pseudoruntimelist.begin(), pseudoruntimelist.end());
-    if(pseudoruntimelist.size() > 0){
-        pseudoruntimelist.clear();
+    history.insert(history.end(), smart_runtime_list.begin(), smart_runtime_list.end());
+    if(smart_runtime_list.size() > 0){
+        smart_runtime_list.clear();
     }
-    registerfile = pseudoregisterfile->copy_file();
-    stageemptytime = pseudoregisterfile->copy_vector(pseudostageemptytime);
+    registerfile = one_instruction_registerfile->copy_file();
+    stageemptytime = one_instruction_registerfile->copy_vector(smart_stageemptytime);
     }
 
     void restore() {
-        if(pseudoruntimelist.size() > 0){
-            pseudoruntimelist.clear();
+        if(smart_runtime_list.size() > 0){
+            smart_runtime_list.clear();
         }
-        pseudoregisterfile = registerfile->copy_file();
-        pseudostageemptytime = registerfile->copy_vector(stageemptytime);
+        one_instruction_registerfile = registerfile->copy_file();
+        smart_stageemptytime = registerfile->copy_vector(stageemptytime);
     }
 
     void insert_halt(Command* com) {
         stageemptytime[0] = history[(int)history.size()-1]->stages[com->readindex][1];
-        pseudostageemptytime[0] = history[(int)history.size()-1]->stages[com->readindex][1];
-        if(pseudoruntimelist.size() > 0){
-            pseudoruntimelist.clear();
+        smart_stageemptytime[0] = history[(int)history.size()-1]->stages[com->readindex][1];
+        if(smart_runtime_list.size() > 0){
+            smart_runtime_list.clear();
         }
-        pseudoregisterfile = registerfile->copy_file();
-        pseudostageemptytime = registerfile->copy_vector(stageemptytime);
-    }
-
-    void print_pipeline() {
-        for (int i = 0; i < (int)history.size(); i++) {
-            history[i]->print_runtime();
-        }
+        one_instruction_registerfile = registerfile->copy_file();
+        smart_stageemptytime = registerfile->copy_vector(stageemptytime);
     }
 
     void print_table(){
