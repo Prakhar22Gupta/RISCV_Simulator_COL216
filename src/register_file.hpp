@@ -1,5 +1,5 @@
-#ifndef COMMAND_H
-#define COMMAND_H
+#ifndef __REGISTER_FILE_H
+#define __REGISTER_FILE_H
 #include <stdlib.h>
 #include <vector>
 #include <string>
@@ -12,9 +12,6 @@ using namespace std;
 struct Command{
 
     public:
-    bool intermediatelatchesactive;
-    int intermediatelatchlength;
-    int numberofstages;
     vector<int> stagelengths;
     int bypassindex1;
     int bypassindex2;
@@ -28,49 +25,23 @@ struct Command{
     int value;
     int constant;
 
-    Command(bool param1, int param2, vector<int> param3, vector<int> param4, vector<int> param5, vector<string> param6, string param7, int param8, int param9) {
-        intermediatelatchesactive = param1;
-        intermediatelatchlength = param2;
-        numberofstages = (int)param3.size();
+    Command(vector<int> param3, vector<int> param4, vector<int> param5, vector<string> param6, string param7, int param8, int param9) {
         stagelengths = param3;
+        
         bypassindex1 = param4[0];
         bypassindex2 = param4[1];
         readindex = param4[2];
         writeindex = param4[3];
+
         destinationregister = param5[0];
         sourceregister1 = param5[1];
         sourceregister2 = param5[2];
+        constant = param9;
+
         stagenames = param6;
         opcode = param7;
         value = param8;
-        constant = param9;
     }
-
-    void print_command() {
-    cout << "intermediatelatchesactive: " << intermediatelatchesactive << endl;
-    cout << "intermediatelatchlength: " << intermediatelatchlength << endl;
-    cout << "numberofstages: " << numberofstages << endl;
-    cout << "stagelengths: ";
-    for (int i = 0; i < (int)stagelengths.size(); i++) {
-        cout << stagelengths[i] << " ";
-    }
-    cout << endl;
-    cout << "bypassindex1: " << bypassindex1 << endl;
-    cout << "bypassindex2: " << bypassindex2 << endl;
-    cout << "readindex: " << readindex << endl;
-    cout << "writeindex: " << writeindex << endl;
-    cout << "destinationregister: " << destinationregister << endl;
-    cout << "sourceregister1: " << sourceregister1 << endl;
-    cout << "sourceregister2: " << sourceregister2 << endl;
-    cout << "stagenames: ";
-    for (int i = 0; i < (int)stagenames.size(); i++) {
-        cout << stagenames[i] << " ";
-    }
-    cout << endl;
-    cout << "opcode: " << opcode << endl;
-    cout << "value: " << value << endl;
-    cout << "constant: " << constant << endl;
-}
 };
 
 struct QueueNode {
@@ -257,12 +228,6 @@ struct Runtimedata{
         stages = temp1;
     }
     
-    void print_runtime() {
-    for (int i = 0; i < (int)stagenames.size(); i++) {
-        cout << stagenames[i] << " " << stages[i][0] << " " << stages[i][1] << endl;
-    }
-    cout << endl;
-    }
 };
 
 #endif
