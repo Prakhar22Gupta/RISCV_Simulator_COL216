@@ -177,8 +177,8 @@ struct Pipeline{
     }
 
     void insert_halt(Command* com) {
-        stageemptytime[0] = history[(int)history.size()-1]->stages[com->readindex][1];
-        smart_stageemptytime[0] = history[(int)history.size()-1]->stages[com->readindex][1];
+        stageemptytime[0] = history[(int)history.size()-1]->stages[(com->readindex)-1][1];
+        smart_stageemptytime[0] = history[(int)history.size()-1]->stages[(com->readindex)-1][1];
         if(smart_runtime_list.size() > 0){
             smart_runtime_list.clear();
         }
