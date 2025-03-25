@@ -44,9 +44,9 @@ struct Simulator
 	{
 		instructions = {{"add", &Simulator::add}, {"and", &Simulator::And}, {"or", &Simulator::Or},
                 {"sub", &Simulator::sub}, {"mul", &Simulator::mul}, {"beq", &Simulator::beq},
-                {"bne", &Simulator::bne}, {"slt", &Simulator::slt}, {"jal", &Simulator::j},
+                {"bne", &Simulator::bne},{"bge", &Simulator::bge},{"blt",&Simulator::blt}, {"slt", &Simulator::slt}, {"jal", &Simulator::jal},
                 {"lw", &Simulator::lw}, {"sw", &Simulator::sw},{"addi", &Simulator::addi},
-                {"slli", &Simulator::sll}, {"srli", &Simulator::srl}, {"jalr", &Simulator::jalr},{"j", &Simulator::j}, {"lb",  &Simulator::lb},
+                {"slli", &Simulator::slli}, {"srli", &Simulator::srli},{"srai",&Simulator::srai}, {"jalr", &Simulator::jalr},{"lb",  &Simulator::lb},
 				{"sb",  &Simulator::sb}};
 		parser = new Parser(file);
 	    commands=parser->commands;
@@ -109,6 +109,14 @@ struct Simulator
 		return bOP(r1, r2, label, [](int a, int b)
 				   { return a != b; });
 	}
+    int bge(std::string r1, std::string r2, std::string label){
+        return bOP(r1, r2, label, [](int a, int b)
+                   { return a >= b; });
+    }
+    int blt(std::string r1, std::string r2, std::string label){
+        return bOP(r1, r2, label, [](int a, int b)
+                   { return a < b; });
+    }
 	// implements beq and bne by taking the comparator
 	int bOP(std::string r1, std::string r2, std::string branch_operand, std::function<bool(int, int)> comp)
 	{
@@ -143,7 +151,7 @@ struct Simulator
 	}
 
 	// Implements both j (jump) and jal (jump and link)
-	int j(std::string rd, std::string offset_str, std::string unused2)
+	int jal(std::string rd, std::string offset_str, std::string unused2)
 	{
 		try {
 			// Convert the offset from string to integer.
@@ -378,7 +386,7 @@ int sb(std::string r, std::string in1, std::string in2)
 		}
 	}
 	// perform shift left operation
-	int sll(std::string r1, std::string r2, std::string num)
+	int slli(std::string r1, std::string r2, std::string num)
 	{
 		if (!checkRegisters({r1, r2}) || registerMap[r1] == 0){
 			return 1;
@@ -395,7 +403,7 @@ int sb(std::string r, std::string in1, std::string in2)
 		}
 	}
 	// perform shift right operation
-	int srl(std::string r1, std::string r2, std::string num)
+	int srli(std::string r1, std::string r2, std::string num)
 	{
 		if (!checkRegisters({r1, r2}) || registerMap[r1] == 0){
 			return 1;
@@ -411,6 +419,22 @@ int sb(std::string r, std::string in1, std::string in2)
 			return 4;
 		}
 	}	
+    int srai(std::string r1, std::string r2, std::string num)
+    {
+        if (!checkRegisters({r1, r2}) || registerMap[r1] == 0){
+            return 1;
+        }
+        try
+        {
+            registers[registerMap[r1]] = (registers[registerMap[r2]] >> stoi(num));
+            PCnext = PCcurr + 1;
+            return 0;
+        }
+        catch (std::exception &e)
+        {
+            return 4;
+        }
+    }
 	// checks if label is valid
 	inline bool checkLabel(std::string str)
 	{
@@ -468,7 +492,7 @@ int sb(std::string r, std::string in1, std::string in2)
 				std::cerr << s << ' ';
 			std::cerr << '\n';
 		}
-		print_final_output();
+		// print_final_output();
 	}
 
 	// execute the commands sequentially (no pipelining)
@@ -500,10 +524,10 @@ int sb(std::string r, std::string in1, std::string in2)
 			parser->parametric_commands[PCcurr]->value=registers[registerMap[command[1]]];
 			pipeline->run_command(parser->parametric_commands[PCcurr]);
 			pipeline->save();
-			if(command[0]=="beq" || command[0]=="bne" || command[0]=="j" || command[0]=="jal" || command[0]=="jalr"){
+			if(command[0]=="beq" || command[0]=="bne" || command[0]=="bge" || command[0]=="blt" || command[0]=="jal" || command[0]=="jalr"){
 				pipeline->insert_halt(parser->parametric_commands[PCcurr]);
 			}
-			if(command[0]=="sw" || command[0]=="sb"){
+			if(command[0]=="sw" || command[0]=="sb" || command[0]=="lw" || command[0]=="lb"){
 				updatememory(command,pipeline->history[(int)pipeline->history.size()-1]->stages[parser->parametric_commands[PCcurr]->readindex][1]);
 			}
 			PCcurr = PCnext;
@@ -524,37 +548,7 @@ int sb(std::string r, std::string in1, std::string in2)
 		memoryupdatequeue->enqueue(address,registers[registerMap[command[1]]],time);
 	}
 
-	void print_final_output(){
-		vector<int> reg(32,0);
-		std::unordered_map<int, int> memDelta;
-		int numberofclockcycles=pipeline->timetaken/pipeline->cycle;
-		for(int i=0;i<numberofclockcycles;i++){
-			int time=(i+1)*pipeline->cycle;
-			printRegistersAndMemoryDelta(i+1,reg,memDelta);
-			memDelta={};
-			reg=pipeline->registerfile->state_at_time(time,reg,time-pipeline->cycle);
-			vector<int> temp=memoryupdatequeue->peek();
-			if(temp[2]<=time and temp[2]>time-pipeline->cycle){
-				memDelta[temp[1]]=temp[0];
-				memoryupdatequeue->move_right();
-			}
-		}
-		printRegistersAndMemoryDelta(numberofclockcycles,reg,memDelta);
-	}
-	// print the register data in hexadecimal
-	 void printRegistersAndMemoryDelta(int clockCycle,vector<int> reg,unordered_map<int, int> memDelta)
-	{
-		for (int i = 0; i < 32; ++i){
-			std::cout << reg[i] << ' ';
-		}
-		std::cout << endl;
-		std::cout << memDelta.size() << ' ';
-		for (auto &p : memDelta){
-			std::cout << (p.first) << ' ' << p.second << ' ';
-		}
-		std::cout <<endl;
-		memDelta.clear();
-	}
+	
 
 };
 
