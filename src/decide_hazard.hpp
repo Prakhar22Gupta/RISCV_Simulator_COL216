@@ -1,5 +1,5 @@
-#ifndef __DECIDE_HAZARD_HPP__
-#define __DECIDE_HAZARD_HPP__
+#ifndef _DECIDE_HAZARD_HPP_
+#define _DECIDE_HAZARD_HPP_
 
 #include <unordered_map>
 #include <string>
