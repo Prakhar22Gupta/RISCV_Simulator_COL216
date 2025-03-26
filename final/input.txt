@@ -1,0 +1,5 @@
+lw x6 0 x6
+beq x6 x0 8
+addi x5 x5 1
+addi x10 x5 0
+jalr x1 x10 0
