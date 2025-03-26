@@ -124,7 +124,7 @@ struct Simulator
 			return 1;
 		try {
 			// Try interpreting branch_operand as an immediate offset.
-			int offset = stoi(branch_operand);
+			int offset = (stoi(branch_operand)/4);
 			PCnext = comp(registers[registerMap[r1]], registers[registerMap[r2]]) ? PCcurr + offset : PCcurr + 1;
 			return 0;
 		}
@@ -167,7 +167,7 @@ struct Simulator
 			}
 			
 			// Update the next program counter.
-			PCnext = PCcurr + offset;
+			PCnext = PCcurr + (offset/4);
 			return 0;
 		}
 		catch (std::exception &e) {	
@@ -183,7 +183,7 @@ struct Simulator
 		try {
 			int offset = stoi(offset_str);
 			// Calculate the target address as the sum of the content of rs1 and the immediate offset.
-			int target = registers[registerMap[rs1]] + offset;
+			int target = registers[registerMap[rs1]] + (offset/4);
 			
 			// Update the link if needed: if rd is not x0, store PCcurr+1 in rd.
 			if (registerMap[rd] != 0)
@@ -201,7 +201,7 @@ struct Simulator
 	int lw(std::string r, std::string in1, std::string in2)
 	{
 		std::string location;
-		if(std::find(in1.begin(),in1.end(),'$')!=in1.end()){
+		if(std::find(in1.begin(),in1.end(),'x')!=in1.end()){
 			location=in1;
 		}
 		else{
@@ -222,7 +222,7 @@ struct Simulator
 	int sw(std::string r, std::string in1, std::string in2)
 	{
 		std::string location;
-		if(std::find(in1.begin(),in1.end(),'$')!=in1.end()){
+		if(std::find(in1.begin(),in1.end(),'x')!=in1.end()){
 			location=in1;
 		}
 		else{
@@ -244,51 +244,51 @@ struct Simulator
 	}
 
 	// Load Byte: Loads a single byte (with sign-extension) into register r.
-int lb(std::string r, std::string in1, std::string in2)
-{
-    std::string location;
-    if(std::find(in1.begin(), in1.end(), '$') != in1.end()){
-        location = in1;
-    }
-    else{
-        location = in1 + "(" + in2 + ")";
-    }
-    if (!checkRegister(r) || registerMap[r] == 0)
-        return 1;
-    int addr = 0;
-    try {
-        size_t lparen = location.find('(');
-        if(lparen != std::string::npos){
-            int offset = (lparen > 0) ? stoi(location.substr(0, lparen)) : 0;
-            std::string reg = location.substr(lparen+1);
-            reg.pop_back(); // remove trailing ')'
-            if(!checkRegister(reg))
-                return 1;
-            addr = registers[registerMap[reg]] + offset;
-        } else {
-            addr = stoi(location);
+    int lb(std::string r, std::string in1, std::string in2)
+    {
+        std::string location;
+        if(std::find(in1.begin(), in1.end(), 'x') != in1.end()){
+            location = in1;
         }
-    } catch(std::exception &e) {
-        return 4;
+        else{
+            location = in1 + "(" + in2 + ")";
+        }
+        if (!checkRegister(r) || registerMap[r] == 0)
+            return 1;
+        int addr = 0;
+        try {
+            size_t lparen = location.find('(');
+            if(lparen != std::string::npos){
+                int offset = (lparen > 0) ? stoi(location.substr(0, lparen)) : 0;
+                std::string reg = location.substr(lparen+1);
+                reg.pop_back(); // remove trailing ')'
+                if(!checkRegister(reg))
+                    return 1;
+                addr = registers[registerMap[reg]] + offset;
+            } else {
+                addr = stoi(location);
+            }
+        } catch(std::exception &e) {
+            return 4;
+        }
+        // For lb, no alignment check is needed.
+        int word_index = addr / 4;
+        int byte_offset = addr % 4;
+        if(word_index < 0 || word_index >= (MAX >> 2)) return -3;
+        int word = data[word_index];
+        int byte_val = (word >> (8 * byte_offset)) & 0xff;
+        // Sign-extend if the most significant bit is set.
+        if (byte_val & 0x80) byte_val |= ~0xff;
+        registers[registerMap[r]] = byte_val;
+        PCnext = PCcurr + 1;
+        return 0;
     }
-    // For lb, no alignment check is needed.
-    int word_index = addr / 4;
-    int byte_offset = addr % 4;
-    if(word_index < 0 || word_index >= (MAX >> 2)) return -3;
-    int word = data[word_index];
-    int byte_val = (word >> (8 * byte_offset)) & 0xff;
-    // Sign-extend if the most significant bit is set.
-    if (byte_val & 0x80) byte_val |= ~0xff;
-    registers[registerMap[r]] = byte_val;
-    PCnext = PCcurr + 1;
-    return 0;
-}
 
 // Store Byte: Stores the least-significant byte from register r into memory.
 int sb(std::string r, std::string in1, std::string in2)
 {
     std::string location;
-    if(std::find(in1.begin(), in1.end(), '$') != in1.end()){
+    if(std::find(in1.begin(), in1.end(), 'x') != in1.end()){
         location = in1;
     }
     else{
