@@ -1,20 +1,23 @@
-compile : logic.hpp parser.hpp simulator.hpp decide_hazard.hpp register_file.hpp no_bypass.cpp bypassing.cpp 
-	g++ no_bypass.cpp -o pipelinesimulator5.o
-	g++ bypassing.cpp -o pipelinesimulator5b.o
+compile : mc_translator.hpp logic.hpp parser.hpp simulator.hpp decide_hazard.hpp register_file.hpp bypassing_forbid.cpp bypassing.cpp 
+	g++ bypassing_forbid.cpp -o bypassing_forbid.o
+	g++ bypassing.cpp -o bypassing.o
+	g++ main.cpp -o main.o
+	./main.o
 
 clean:
-	rm pipelinesimulator5.o
-	rm pipelinesimulator5b.o
+	rm bypassing_forbid.o
+	rm bypassing.o
+	rm main.o
+	
+bypassing_forbid: register_file.hpp logic.hpp parser.hpp simulator.hpp decide_hazard.hpp bypassing_forbid.cpp
+	g++ bypassing_forbid.cpp -o bypassing_forbid.o
 
-pipelinesimulator5: register_file.hpp logic.hpp parser.hpp simulator.hpp decide_hazard.hpp no_bypass.cpp
-	g++ no_bypass.cpp -o pipelinesimulator5.o
+bypassing: register_file.hpp logic.hpp parser.hpp simulator.hpp decide_hazard.hpp bypassing.cpp
+	g++ bypassing.cpp -o bypassing.o
 
-pipelinesimulator5b: register_file.hpp logic.hpp parser.hpp simulator.hpp decide_hazard.hpp bypassing.cpp
-	g++ bypassing.cpp -o pipelinesimulator5b.o
+run_bypass_forbid: bypassing_forbid
+	./bypassing_forbid.o 0 instructions.txt
 
-run_no_bypass: pipelinesimulator5
-	./pipelinesimulator5.o input.txt
-
-run_bypass: pipelinesimulator5b
-	./pipelinesimulator5b.o input.txt
+run_bypass: bypassing
+	./bypassing.o 1 instructions.txt
 

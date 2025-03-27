@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include "mc_translator.hpp"  // assumes this header provides: std::string decodeMC(const std::string &machineCode)
+#include "mc_translator.hpp"
 using namespace std;
 
 int main(){
@@ -43,7 +43,7 @@ int main(){
     }
     }
   
-    file.open("input.txt", ios::out);
+    file.open("instructions.txt", ios::out);
     if (file.is_open()) {
     for (int i = 0; i < total_instructions; i++) {
       file << disassembled_instruction.at(i) << endl;

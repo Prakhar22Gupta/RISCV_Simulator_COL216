@@ -1,16 +1,18 @@
-#ifndef __LOGIC_H__
-#define __LOGIC_H__
+#ifndef __LOGIC_HPP__
+#define __LOGIC_HPP__
 #include <stdlib.h>
 #include <vector>
 #include <string>
 #include <unordered_map>
 #include <algorithm>
 #include <iostream>
+#include <iomanip>
 #include "register_file.hpp"
+
 using namespace std;
 struct Pipeline{
 
-    bool fifo;
+    bool firstinfirstoutactive;
     bool bypassactive;
     vector<int> stageemptytime;
     vector<int> smart_stageemptytime;
@@ -25,9 +27,9 @@ struct Pipeline{
     unordered_map<string, int> stagemap;
     int cycle;
  
-    Pipeline(bool param2, bool param3, int param4, int param5, vector<string> param6,bool param7) {
-        fifo= param7;
-        bypassactive = param2;
+    Pipeline(bool param1, bool param2,vector<string> param5,bool param6) {
+        bypassactive = param1;
+        firstinfirstoutactive= param6;
         registerfile = new Registerfile(32);
         one_instruction_registerfile = new Registerfile(32);
         stageemptytime.resize(5);
@@ -44,15 +46,15 @@ struct Pipeline{
         smart_stagestarttime = temp4;
         starttime = 0;
         timetaken = 0;
-        for (int i = 0; i < (int)param6.size(); i++) {
-            stagemap[param6[i]] = i;
+        for (int i = 0; i < 5; i++) {
+            stagemap[param5[i]] = i;
         }
         history.resize(0);
         smart_runtime_list.resize(0);
         cycle=-1;
     }
 
-    struct Runtimedata* run_command(Command* param1){
+    struct Runtimedata* run_command(Command* param1, const std::string& cmd_str = ""){
 
     vector<int> v = {param1->destinationregister,param1->sourceregister1,param1->sourceregister2};
     vector<int> v1 = {param1->bypassindex1,param1->bypassindex2,param1->readindex,param1->writeindex};
@@ -74,11 +76,11 @@ struct Pipeline{
     }
 
 
-    bool firstinfirstouttemp=fifo;
+    bool firstinfirstouttemp=firstinfirstoutactive;
     if(command->destinationregister!=-1){
         firstinfirstouttemp=false;
     }
-    struct Runtimedata* runtime = new Runtimedata(command,stageemptytime[0],5);
+    struct Runtimedata* runtime = new Runtimedata(command, stageemptytime[0], 5, cmd_str);
     runtime->stagenames[0]=command->stagenames[0];
     runtime->stages[0]={smart_stageemptytime[stagemap[command->stagenames[0]]],-1};
     smart_stagestarttime[stagemap[command->stagenames[0]]]=smart_stageemptytime[stagemap[command->stagenames[0]]];
@@ -90,17 +92,21 @@ struct Pipeline{
         if ((j + 1) == command->readindex) {
             if(!bypassactive){
                 if (command->sourceregister1 != -1) {
+                    if(command->sourceregister1!=0) 
                     endtime = max(endtime, one_instruction_registerfile->updatetime[command->sourceregister1]);
                 }
                 if (command->sourceregister2 != -1) {
+                    if(command->sourceregister2!=0) 
                     endtime = max(endtime, one_instruction_registerfile->updatetime[command->sourceregister2]);
                 }
             }
             else{
                 if (command->sourceregister1 != -1) {
+                    if(command->sourceregister1!=0) 
                     endtime = max(endtime, one_instruction_registerfile->intermediateupdatetime[command->sourceregister1]);
                 }
                 if (command->sourceregister2 != -1) {
+                    if(command->sourceregister2!=0) 
                     endtime = max(endtime, one_instruction_registerfile->intermediateupdatetime[command->sourceregister2]);
                 }
             }
@@ -115,15 +121,14 @@ struct Pipeline{
         // Update register file times when applicable
         if (command->destinationregister != -1) {
 
-            //This is for EX stage in the case of forwarding
-            if (j == command->readindex) {
+            //This is for -- stage in the case of forwarding
+            if (j == command->bypassindex1){
                 // Update intermediate updatetime at read stage.
                 one_instruction_registerfile->intermediateupdatetime[command->destinationregister] = endtime;
             }
             if (j == command->writeindex) {
                 // At the write-back stage, update the register's updatetime.
                 one_instruction_registerfile->updatetime[command->destinationregister] = endtime;
-                one_instruction_registerfile->queue->enqueue(command->destinationregister, command->value, endtime);
             }
         }
         runtime->stages[j][1] = endtime;
@@ -134,8 +139,7 @@ struct Pipeline{
     }
 
     //for last stage
-    smart_stageemptytime[stagemap[command->stagenames[4]]] =
-        runtime->stages[4][0] + command->stagelengths[4];
+    smart_stageemptytime[stagemap[command->stagenames[4]]] =runtime->stages[4][0] + command->stagelengths[4];
     if (smart_stageemptytime[stagemap[command->stagenames[4]]] > timetaken) {
         timetaken = smart_stageemptytime[stagemap[command->stagenames[4]]];
     }
@@ -143,17 +147,16 @@ struct Pipeline{
         if (command->writeindex == 4) {
             one_instruction_registerfile->updatetime[command->destinationregister] =
                 smart_stageemptytime[stagemap[command->stagenames[4]]];
-            one_instruction_registerfile->queue->enqueue(command->destinationregister, command->value,
-                smart_stageemptytime[stagemap[command->stagenames[4]]]);
         }
         if (command->readindex == 4) {
             one_instruction_registerfile->intermediateupdatetime[command->destinationregister] =
                 smart_stageemptytime[stagemap[command->stagenames[4]]];
         }
+        if(command->destinationregister!=0)
         registerfile->values[command->destinationregister] = command->value;
     }
-    runtime->stages[4][1] =
-    smart_stageemptytime[stagemap[command->stagenames[4]]];
+    runtime->stages[4][1] = smart_stageemptytime[stagemap[command->stagenames[4]]];
+    if(command->destinationregister!=0)
     registerfile->values[command->destinationregister] = command->value;
     smart_runtime_list.push_back(runtime);
     return runtime;
@@ -185,63 +188,57 @@ struct Pipeline{
         one_instruction_registerfile = registerfile->copy_file();
         smart_stageemptytime = registerfile->copy_vector(stageemptytime);
     }
+    
+    
+    void print_table(std::ostream &out = std::cout) {
+        if(cycle < 0) {
+            out << "Error: Pipeline is too asymmetric to print a table" << std::endl;
+            return;
+        }
+        int numcycles = timetaken / cycle;
 
-    void print_table(){
-        if(cycle<0){
-            cerr << "Error: Pipeline is too asymetric to print a table" << endl;
-        }
-        int numcycles=timetaken/cycle;
-        cout<<"   ||";
+        // Determine the width of the first column
+        int max_cmd_len = 15;
+
+        // Print the header row
+        out << std::string(max_cmd_len, ' ') << "||";
         for (int i = 0; i < numcycles; i++) {
-            cout<<i<<"";
-            if(i<10){
-                cout<<"   ";
-            }
-            else if(i<100){
-                cout<<"  ";
-            }
-            else if(i<1000){
-                cout<<" ";
-            }
-            cout<<"|";
+            out << std::setw(4) << i << "|";
         }
-        cout<<endl;
-        for(int i=0; i<(int)history.size(); i++){
-            cout<<i<<"";
-            if(i<10){
-                cout<<"  ";
+        out << std::endl;
+
+        // Print the pipeline table
+        for (int i = 0; i < (int)history.size(); i++) {
+            out << std::left << std::setw(max_cmd_len) << history[i]->literal_command << "||";
+
+            int x = history[i]->stages[0][0];
+            int j = x / cycle;
+            for (; j > 0; j--) {
+                out << "    |";
             }
-            else if(i<100){
-                cout<<" ";
-            }
-            cout<<"||";
-            int x= history[i]->stages[0][0];
-            int j=x/cycle;
-            for(;j>0;j--){
-                std::cout<<"    |";
-            }
-            for(int k=0; k<(int)history[i]->stages.size(); k++){
-                string name=history[i]->stagenames[k];
+            for (int k = 0; k < (int)history[i]->stages.size(); k++) {
+                std::string name = history[i]->stagenames[k];
                 if (name.length() >= 4) {
-                    name=name.substr(0, 4);
+                    name = name.substr(0, 4);
                 } else {
                     name.append(4 - name.length(), ' ');
                 }
-                std::cout<<name<<"|";
-                int y= history[i]->stages[k][1]-history[i]->stages[k][0]-cycle;
-                int l=y/cycle;
-                for(;l>0;l--){
-                    std::cout<<"  * |";
+                out << name << "|";
+                int y = history[i]->stages[k][1] - history[i]->stages[k][0] - cycle;
+                int l = y / cycle;
+                for (; l > 0; l--) {
+                    out << "  * |";
                 }
             }
-            int z=timetaken-history[i]->stages[(int)history[i]->stages.size()-1][1];
-            int m=z/cycle;
-            for(;m>0;m--){
-                std::cout<<"    |";
+            int z = timetaken - history[i]->stages[(int)history[i]->stages.size() - 1][1];
+            int m = z / cycle;
+            for (; m > 0; m--) {
+                out << "    |";
             }
-            std::cout<<""<<endl;
+            out << std::endl;
         }
     }
+    
 };
 
 #endif
