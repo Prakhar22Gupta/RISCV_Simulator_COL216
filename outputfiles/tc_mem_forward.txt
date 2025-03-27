@@ -1,0 +1,3 @@
+               ||   0|   1|   2|   3|   4|   5|   6|
+lw x6 0 x7     ||IF  |ID  |EX  |MEM |WB  |    |    |
+sw x6 0 x7     ||    |IF  |ID  |  * |EX  |MEM |WB  |
