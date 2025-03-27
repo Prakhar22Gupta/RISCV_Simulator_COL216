@@ -1,4 +1,4 @@
-# RISC-V Pipeline Simulator
+# RISC-V Complete Pipeline Simulator
 ## Authors
 
 - **Name:** Prakhar Gupta  
@@ -11,7 +11,6 @@
 
 1. **Modular Structure**
   - The project is divided into several modules:
-    - **Parser Module:**
      - **Machine Code Translator:** Converts machine code into human-readable RISC-V assembly instructions.
      - **Parser:** Tokenizes each instruction into operands, registers, and special characteristics like offsets.
     - **Simulator Module:** Simulates the pipeline execution, integrating all modules and running with or without forwarding, while storing the results.
